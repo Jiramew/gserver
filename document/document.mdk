@@ -1,0 +1,103 @@
+Package : [UTF8]ctex
+
+# Elasticsearch与solr的对比 
+
+## 官网资料、社区
+* es: https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html（从tutorial到详细的api使用）      
+社区: https://elasticsearch.cn/、https://discuss.elastic.co/
+* solr: http://mirror.bit.edu.cn/apache/lucene/solr/ref-guide/apache-solr-ref-guide-6.6.pdf (900多页的文档，十分详尽)
+
+## 分布式架构&分布式部署
+### 分布式架构
+* es: 基于自身的node特性，不需要接入其他服务构建集群，自身有一个“自动发现”的特性，可以通过一个端口检测其他节点并于其他节点通信。相关配置如下：      
+discovery.zen.ping.unicast.hosts（设置集群中master节点的初始列表，可以通过这些节点来自动发现新加入集群的节点）      
+discovery.zen.minimum_master_nodes（设置这个参数来保证集群中的节点可以知道其它N个有master资格的节点，若少于这个数，集群其他节点也不会工作）      
+支持主节点自动选举。管理web界面（Kibana的x-pack插件或head插件）
+
+* solr：基于zookeeper建立集群，便于管理。通过zk自动发现集群你得节点。支持主节点自动选举（zk特性）。
+管理web界面（solr自带）      
+
+### 数据分片与备份
+* es: 可以指定特定数据项的数据分片数以及数据备份数。在数据导入过程中配置。相关配置项如下：      
+
+~ Center
+"number_of_shards" : 3,       
+"number_of_replicas" : 1 
+~
+
+~ Center
+![test]
+
+[test]: images/test.png "test" { width:auto; max-width:90% }
+
+~
+
+如上图所示，表示数据进行了三分片两备份。
+
+* solr: 与es相同，同样可指定。相关配置项如下：      
+~ Center
+-shards 2 -replicationFactor 2
+~
+
+### 集群监控
+* es: 通过Http Restful Api检测集群健康状况 
+* solr: 通过JMX可与Prometheus结合监控状态
+
+## 数据导入
+### 数据格式
+* es: 仅支持json的导入，但是由第三方很多的序列化方法可供使用。
+* solr: 支持多种格式，json、csv、xml
+
+### 数据从mysql导入，同步
+* es:
+ 
+1、通过elasticsearch-jdbc插件可导入。（已测试可导入）。      
+2、同样的，可通过这个插件进行[数据同步]（近实时）。原理：通过logstash监听数据库的某个表。可自定义检查时间间隔以及sql来定制需要同步的字段，实现数据库的操作（insert、update等)自动同步至es。（未测试）      
+3、支持kettle导入
+
+* solr: 目前找到方法为定时与手动方法，可增量、全量同步数据。配置db-data-config.xml，可定制导入字段，通过web管理界面或代码(solrj)实现导入。
+
+## 搜索语法、包装成本、Java支持&中文分词支持
+[注：原生的es和solr对中文的分词可以说是跟没有一样，只是简单的把字分开而已，es可以设置单字或双字模式。][#section]        
+
+* es:      
+ 
+1、Http Restful Api      
+2、Client: 对Java支持很好，通过连接串拿到es_client。（官方多语言支持,Java、Python、javascript...）      
+3、如果不使用Client方法，专门使用Http Restful Api
+es提供了如下两种请求格式：      
+ REST request URI, 例如:      
+ ``` javascript
+ GET /bank/_search?q=*&sort=account_number:asc&pretty
+ ```       
+ REST request body, 例如:
+``` javascript
+GET /bank/_search
+{
+  "query": { "match_all": {} },
+  "sort": [
+    { "account_number": "asc" }
+  ]
+}
+```      
+4、es有一套成熟的DSL，可以做十分复杂的过滤、聚合、查找、分页的query。      
+5、中文分词：elasticsearch-analysis-ik、elasticsearch-hanlp等第三方插件，并且插件很多，可对比效果使用      
+6、在title里面添加zh和en两个fields，这样对中文，英文都分别使用分词器，title.zh使用ik分词，title.en使用英文分词，搜索可同时覆盖。
+
+* solr:
+ 
+1、Http Restful Api      
+2、Client: solrj(maven:solr-solrj)（官方只支持Java）      
+3、conf下的managed-schema.xml配置文件中配置中文分词：IK Analyzer/mmseg4j   (可配词库)      
+4、有全文本搜索过滤主要还是查找功能。
+
+
+
+
+~ Align-Right
+Enjoy! By Hanbing.      
+Using madoko.
+~
+
+
+[数据同步]:https://www.elastic.co/guide/en/logstash/current/plugins-inputs-jdbc.html
