@@ -1,0 +1,72 @@
+Package : [UTF8]ctex
+
+# Elasticsearch性能基准测试
+
+## 官方推荐机器配置
+* 内存      
+es最重要的资源是内存，64GB RAM的机器是官方推荐的，32、16GB的机器也能用于生产环境，但不建议小于8GB。
+* CPU      
+es对CPU开销不是很大(本机开了3个node，同时进行100并发查询、数据插入索引，才把cpu将将打满100%)，但多核CPU还是必须的，通用的集群使用2到8核机器。
+* 硬盘      
+任何集群的瓶颈，对于磁盘io要求很高（如：大量、实时写入，大量存取索引），最好能使用SSD。
+* 网络      
+由于elasticsearch的特性，集群节点间的传输，包括数据的分片、备份、同步，以及数据从不同节点的分片获取和汇总。网络带宽也是很重要的。
+
+
+## 性能试验方案
+### 数据库导入
+采用logstash导入，以及kettle导入，并比较两者效率。主要测试磁盘io、网络。
+
+### 本地json导入
+通过本地json文件导入。主要测试index速度和效率。
+
+### 内存
+1、利用jstat日志来得到内存指标的变化，`jstat -gc -h5 XXX 3s > test-100W.log`，不同数据量修改文件名，输出到不同文件中。      
+2、粗粒度的监控Java Heap、GC，采用Grafana监控模式查看，通过http resuful api调用（查询）或siege压测的方式查看操作时的内存指标变化。      
+3、也可通过Visualvm的Heap dump查看相关指标。
+
+### 查询效率
+通过siege、multiprocess检测查询平均耗时。以及测试优化点。
+
+### 官方的benchmark指标检测
+配置esrally环境。https://github.com/elastic/rally
+
+## 数据准备
+已准备mysql的数据表，数据规模130万。可扩展。
+已准备与上面相同的json文件，数据规模130万。可扩展。
+
+## 相关脚本
+例如下面，为es创建index脚本，其他脚本见文件夹下：
+```
+curl -XPUT "http://127.0.0.1:9200/productindex"
+curl -XPOST "http://127.0.0.1:9200/productindex/product/_mapping?pretty" -d ' 
+{
+    "product": {
+            "properties": {
+                "company_name": {
+                    "type": "text",
+					          "analyzer": "ik_smart",
+                    "search_analyzer": "ik_smart"
+                },
+                "id": {
+                    "type": "long"
+                },
+                "data_status": {
+                    "type": "long"
+                }
+            }
+        }
+  }'
+  
+```
+
+create_index_\*.sh： 创建index以及index配置。          
+\*logstash.conf: logstash配置从mysql同步至elasticsearch      
+multi_search.py: 多进程压测      
+elasticsearch_metrics.py: 循环获取系统指标供grafana监控。    
+
+                      
+[]{ margin=1ex }
+Enjoy! By Hanbing.      
+Using madoko.
+{ text-align=right }
