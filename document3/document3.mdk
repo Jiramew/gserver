@@ -1,0 +1,88 @@
+Package : \[UTF8\]ctex
+
+# 实验配置
+## 机器配置
+16G 内存，4核，50G 硬盘
+
+##  数据传输      
+mysql 10.1.90.25\(数据库\) --> 10.1.90.36\(es\)      
+网络传输的影响应该可以忽略不计了
+
+## es、logstash配置相关
+* 版本：5.5.1      
+* 内存：           
+-Xms4g       
+-Xmx4g             
+-XX:+UseConcMarkSweepGC                 
+-XX:CMSInitiatingOccupancyFraction=75               
+-XX:+UseCMSInitiatingOccupancyOnly              
+-Xss1m         
+-XX:+AlwaysPreTouch       
+-Djava.awt.headless=true              
+
+
+# 实验（indexing）
+
+## 3分片、0备份、同一网段下，1,394,000条记录：
+`logstash -w 1` 1个worker             
+`"refresh_interval": "1s", "_all": { "enabled": true }` 每秒刷新index，可全字段搜索
+
+\[2017-08-01T16:37:20,872\]\[INFO \]\[logstash.inputs.jdbc     \] \(1.673000s\) SELECT id, data_status, i_name from lh_dna_ccgc_punish_data                 
+\[2017-08-01T16:41:27,270\]\[WARN \]\[logstash.agent           \] stopping pipeline {:id=>"main"}                   
+耗时04:07            
+
+
+## 重复实验，3分片、0备份，1,394,000条记录：
+logstash -w 1
+"refresh_interval": "1s", "_all": { "enabled": true } 同上          
+
+\[2017-08-02T09:33:53,753\]\[INFO \]\[logstash.inputs.jdbc     \] \(3.936000s\) SELECT id, data_status, i_name from lh_dna_ccgc_punish_data                
+\[2017-08-02T09:37:15,028\]\[WARN \]\[logstash.agent           \] stopping pipeline {:id=>"main"}‘                
+耗时03:22            
+
+
+##  3分片、0备份，3,000,000条记录：
+logstash -w 1
+"refresh_interval": "1s", "_all": { "enabled": true } 同上          
+
+\[2017-08-02T09:45:14,604\]\[INFO \]\[logstash.inputs.jdbc     \] \(3.533000s\) SELECT id, data_status, i_name from lh_dna_ccgc_punish_data               
+\[2017-08-02T09:53:49,570\]\[WARN \]\[logstash.agent           \] stopping pipeline {:id=>"main"}               
+耗时08:35            
+
+## 3分片、0备份，5,000,000条记录：
+logstash -w 1
+"refresh_interval": "1s", "_all": { "enabled": true } 同上          
+
+\[2017-08-02T09:57:34,660\]\[INFO \]\[logstash.inputs.jdbc     \] \(7.709000s\) SELECT id, data_status, i_name from lh_dna_ccgc_punish_data               
+\[2017-08-02T10:58:53,819\]\[WARN \]\[logstash.agent           \] stopping pipeline {:id=>"main"}               
+耗时01:01:19            
+注：此处为logstash瓶颈，设置了heap内存可解决，在下面的800w试验中优化了配置               
+
+
+## 3分片、0备份，8,000,000条记录(优化相关配置)：
+logstash -w 4 -xms4g -xmx4g 4个worker（数量等于cpu核数，堆内存优化）               
+"refresh_interval": "-1", "_all": { "enabled": false }                
+注：不使用每秒刷新index（实时搜索才需要），all字段不可用于搜索（一般只对某字段搜索，取消后索引占用空间也减少了一半左右）。               
+
+\[2017-08-02T11:09:16,058\]\[INFO \]\[logstash.inputs.jdbc     \] \(8.827000s\) SELECT id, data_status, i_name from lh_dna_ccgc_punish_data               
+\[2017-08-02T11:25:59,260\]\[WARN \]\[logstash.agent           \] stopping pipeline {:id=>"main"}               
+耗时16:43            
+注：中间查看系统负载load average: 6.12, 3.99, 3.00 打满的状况（感觉负载有点高）               
+
+# 实验日志相关
+## 内存详细日志
+在2.2-2.4的实验进行中执行jstat -gc -h5 4409 3s，日志分别是       
+test-100w_indexing.log       
+test-300w_indexing.log       
+test-500w_indexing.log       
+test-800w_indexing.log       
+
+## 总览数据
+可在Grafana中选择上面实验的时间区间查看以及对比查看       
+
+
+
+~ Align-Right
+Enjoy! By Hanbing.      
+Using madoko.
+~
